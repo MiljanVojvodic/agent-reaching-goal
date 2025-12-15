@@ -174,13 +174,93 @@ class BranchAndBoundAgent(Agent):
         return sorted(neighbors, key=get_priority)
 
 
-class AStar(Agent):
+import heapq
 
+class AStar(Agent):
     def __init__(self):
         super().__init__("AStar")
-
+    
     def find_path(self, grid: Grid, start: tuple[int, int], goal: tuple[int, int]) -> Path:
-        raise NotImplementedError
+        counter = 0
+        
+        def heuristic(pos):
+            return grid.manhattan(pos, goal) * 2
+        
+        g_score = {start: 0}
+        
+        f_score = {start: heuristic(start)}
+        
+        pq = [(f_score[start], counter, start)]
+        counter += 1
+        
+        parent = {start: None}
+        
+        closed_set = set()
+        
+        while pq:
+            current_f, _, current_pos = heapq.heappop(pq)
+            
+            if current_pos in closed_set:
+                continue
+            
+            closed_set.add(current_pos)
+            
+            if current_pos == goal:
+                path_nodes = []
+                node = goal
+                while node is not None:
+                    path_nodes.append(node)
+                    node = parent[node]
+                path_nodes.reverse()
+                return Path(path_nodes)
+            
+            r, c = current_pos
+            neighbors = grid.neighbors4(r, c)
+            
+            sorted_neighbors = self._sort_neighbors(current_pos, neighbors)
+            
+            for neighbor_tile in sorted_neighbors:
+                neighbor_pos = neighbor_tile.pos
+                
+                if neighbor_pos in closed_set:
+                    continue
+                
+                tentative_g = g_score[current_pos] + neighbor_tile.cost
+                
+                if neighbor_pos not in g_score or tentative_g < g_score[neighbor_pos]:
+                    parent[neighbor_pos] = current_pos
+                    
+                    g_score[neighbor_pos] = tentative_g
+                    
+                    f = tentative_g + heuristic(neighbor_pos)
+                    f_score[neighbor_pos] = f
+                    
+                    heapq.heappush(pq, (f, counter, neighbor_pos))
+                    counter += 1
+        
+        return Path([start])
+    
+    def _sort_neighbors(self, current_pos, neighbors):
+        """Sortira susede po ceni, pa po pravcu (Istok, Jug, Zapad, Sever)"""
+        def get_priority(neighbor_tile):
+            cr, cc = current_pos
+            nr, nc = neighbor_tile.pos
+            
+            if nr == cr and nc == cc + 1:
+                direction_priority = 0
+            elif nr == cr + 1 and nc == cc:
+                direction_priority = 1
+            elif nr == cr and nc == cc - 1:
+                direction_priority = 2
+            elif nr == cr - 1 and nc == cc:
+                direction_priority = 3
+            else:
+                direction_priority = 999
+            
+            cost = neighbor_tile.cost
+            return (cost, direction_priority)
+        
+        return sorted(neighbors, key=get_priority)
 
 
 AGENTS: dict[str, Callable[[], Agent]] = {
