@@ -102,13 +102,76 @@ class DFSAgent(Agent):
         
         return Path(stack)
     
-class BranchAndBoundAgent(Agent):
+import heapq
 
+class BranchAndBoundAgent(Agent):
     def __init__(self):
         super().__init__("BranchAndBound")
-
+    
     def find_path(self, grid: Grid, start: tuple[int, int], goal: tuple[int, int]) -> Path:
-        raise NotImplementedError
+        counter = 0
+        pq = [(0, counter, start, [start])]
+        counter += 1
+        
+        best_cost = {start: 0}
+        
+        best_solution = None
+        best_solution_cost = float('inf')
+        
+        while pq:
+            current_cost, _, current_pos, path = heapq.heappop(pq)
+            
+            if current_cost >= best_solution_cost:
+                continue
+            
+            if current_pos == goal:
+                if current_cost < best_solution_cost:
+                    best_solution_cost = current_cost
+                    best_solution = path
+                continue
+            
+            r, c = current_pos
+            neighbors = grid.neighbors4(r, c)
+            
+            sorted_neighbors = self._sort_neighbors(current_pos, neighbors)
+            
+            for neighbor_tile in sorted_neighbors:
+                neighbor_pos = neighbor_tile.pos
+                new_cost = current_cost + neighbor_tile.cost
+                
+                if neighbor_pos not in best_cost or new_cost < best_cost[neighbor_pos]:
+                    if new_cost < best_solution_cost:
+                        best_cost[neighbor_pos] = new_cost
+                        new_path = path + [neighbor_pos]
+                        heapq.heappush(pq, (new_cost, counter, neighbor_pos, new_path))
+                        counter += 1
+        
+        if best_solution:
+            return Path(best_solution)
+        else:
+            return Path([start])
+    
+    def _sort_neighbors(self, current_pos, neighbors):
+        """Sortira susede po ceni, pa po pravcu (Istok, Jug, Zapad, Sever)"""
+        def get_priority(neighbor_tile):
+            cr, cc = current_pos
+            nr, nc = neighbor_tile.pos
+            
+            if nr == cr and nc == cc + 1:
+                direction_priority = 0
+            elif nr == cr + 1 and nc == cc:
+                direction_priority = 1
+            elif nr == cr and nc == cc - 1:
+                direction_priority = 2
+            elif nr == cr - 1 and nc == cc:
+                direction_priority = 3
+            else:
+                direction_priority = 999
+            
+            cost = neighbor_tile.cost
+            return (cost, direction_priority)
+        
+        return sorted(neighbors, key=get_priority)
 
 
 class AStar(Agent):
