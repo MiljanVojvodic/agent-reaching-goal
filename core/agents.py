@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import random
+import heapq
 from dataclasses import dataclass
 from typing import Callable
 
@@ -101,8 +102,6 @@ class DFSAgent(Agent):
                 stack.pop()
         
         return Path(stack)
-    
-import heapq
 
 class BranchAndBoundAgent(Agent):
     def __init__(self):
@@ -172,9 +171,6 @@ class BranchAndBoundAgent(Agent):
             return (cost, direction_priority)
         
         return sorted(neighbors, key=get_priority)
-
-
-import heapq
 
 class AStar(Agent):
     def __init__(self):
