@@ -101,7 +101,7 @@ class DFSAgent(Agent):
             if not found_unvisited:
                 stack.pop()
         
-        return Path(stack)
+        return Path([start])
 
 class BranchAndBoundAgent(Agent):
     def __init__(self):
@@ -109,16 +109,15 @@ class BranchAndBoundAgent(Agent):
     
     def find_path(self, grid: Grid, start: tuple[int, int], goal: tuple[int, int]) -> Path:
         counter = 0
-        pq = [(0, counter, start, [start])]
+        pq = [(0, 1, counter, start, [start])]
         counter += 1
         
         best_cost = {start: 0}
-        
         best_solution = None
         best_solution_cost = float('inf')
         
         while pq:
-            current_cost, _, current_pos, path = heapq.heappop(pq)
+            current_cost, num_nodes, _, current_pos, path = heapq.heappop(pq)
             
             if current_cost >= best_solution_cost:
                 continue
@@ -132,9 +131,7 @@ class BranchAndBoundAgent(Agent):
             r, c = current_pos
             neighbors = grid.neighbors4(r, c)
             
-            sorted_neighbors = self._sort_neighbors(current_pos, neighbors)
-            
-            for neighbor_tile in sorted_neighbors:
+            for neighbor_tile in neighbors:
                 neighbor_pos = neighbor_tile.pos
                 new_cost = current_cost + neighbor_tile.cost
                 
@@ -142,35 +139,15 @@ class BranchAndBoundAgent(Agent):
                     if new_cost < best_solution_cost:
                         best_cost[neighbor_pos] = new_cost
                         new_path = path + [neighbor_pos]
-                        heapq.heappush(pq, (new_cost, counter, neighbor_pos, new_path))
+                        new_num_nodes = len(new_path)
+
+                        heapq.heappush(pq, (new_cost, new_num_nodes, counter, neighbor_pos, new_path))
                         counter += 1
         
         if best_solution:
             return Path(best_solution)
         else:
             return Path([start])
-    
-    def _sort_neighbors(self, current_pos, neighbors):
-        """Sortira susede po ceni, pa po pravcu (Istok, Jug, Zapad, Sever)"""
-        def get_priority(neighbor_tile):
-            cr, cc = current_pos
-            nr, nc = neighbor_tile.pos
-            
-            if nr == cr and nc == cc + 1:
-                direction_priority = 0
-            elif nr == cr + 1 and nc == cc:
-                direction_priority = 1
-            elif nr == cr and nc == cc - 1:
-                direction_priority = 2
-            elif nr == cr - 1 and nc == cc:
-                direction_priority = 3
-            else:
-                direction_priority = 999
-            
-            cost = neighbor_tile.cost
-            return (cost, direction_priority)
-        
-        return sorted(neighbors, key=get_priority)
 
 class AStar(Agent):
     def __init__(self):
@@ -186,7 +163,7 @@ class AStar(Agent):
         
         f_score = {start: heuristic(start)}
         
-        pq = [(f_score[start], counter, start)]
+        pq = [(f_score[start], 1, counter, start)]
         counter += 1
         
         parent = {start: None}
@@ -194,7 +171,7 @@ class AStar(Agent):
         closed_set = set()
         
         while pq:
-            current_f, _, current_pos = heapq.heappop(pq)
+            current_f, num_nodes, _, current_pos = heapq.heappop(pq)
             
             if current_pos in closed_set:
                 continue
@@ -213,9 +190,7 @@ class AStar(Agent):
             r, c = current_pos
             neighbors = grid.neighbors4(r, c)
             
-            sorted_neighbors = self._sort_neighbors(current_pos, neighbors)
-            
-            for neighbor_tile in sorted_neighbors:
+            for neighbor_tile in neighbors:
                 neighbor_pos = neighbor_tile.pos
                 
                 if neighbor_pos in closed_set:
@@ -231,32 +206,12 @@ class AStar(Agent):
                     f = tentative_g + heuristic(neighbor_pos)
                     f_score[neighbor_pos] = f
                     
-                    heapq.heappush(pq, (f, counter, neighbor_pos))
+                    new_num_nodes = num_nodes + 1
+                    
+                    heapq.heappush(pq, (f, new_num_nodes, counter, neighbor_pos))
                     counter += 1
         
         return Path([start])
-    
-    def _sort_neighbors(self, current_pos, neighbors):
-        """Sortira susede po ceni, pa po pravcu (Istok, Jug, Zapad, Sever)"""
-        def get_priority(neighbor_tile):
-            cr, cc = current_pos
-            nr, nc = neighbor_tile.pos
-            
-            if nr == cr and nc == cc + 1:
-                direction_priority = 0
-            elif nr == cr + 1 and nc == cc:
-                direction_priority = 1
-            elif nr == cr and nc == cc - 1:
-                direction_priority = 2
-            elif nr == cr - 1 and nc == cc:
-                direction_priority = 3
-            else:
-                direction_priority = 999
-            
-            cost = neighbor_tile.cost
-            return (cost, direction_priority)
-        
-        return sorted(neighbors, key=get_priority)
 
 
 AGENTS: dict[str, Callable[[], Agent]] = {
