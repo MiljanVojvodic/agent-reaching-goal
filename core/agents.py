@@ -48,56 +48,51 @@ class DFSAgent(Agent):
         visited = {start}
         parent = {start: None}
         
-        def sort_neighbors(current_pos, neighbors):
-            def get_priority(neighbor_tile):
-                cr, cc = current_pos
-                nr, nc = neighbor_tile.pos
-                
-                if nr == cr and nc == cc + 1: # istok
-                    direction_priority = 0
-                elif nr == cr + 1 and nc == cc: # jug
-                    direction_priority = 1
-                elif nr == cr and nc == cc - 1: # zapad
-                    direction_priority = 2
-                elif nr == cr - 1 and nc == cc: # sever
-                    direction_priority = 3
-                else:
-                    direction_priority = 999
-                
-                cost = neighbor_tile.cost
-                
-                return (cost, direction_priority)
-            
-            return sorted(neighbors, key=get_priority)
-        
         while stack:
-            current = stack[-1] # uzimamo prvi element
+            curr = stack[-1] # uzimamo prvi element
             
-            if current == goal:
-                path_nodes = []
+            if curr == goal:
+                path = []
                 node = goal
                 while node is not None: # rekonstrukcija putanje
-                    path_nodes.append(node)
+                    path.append(node)
                     node = parent[node]
-                path_nodes.reverse()
-                return Path(path_nodes)
+                path.reverse()
+                return Path(path)
             
-            r, c = current # uzimamo trenutni element
+            r, c = curr # uzimamo trenutni element
             neighbors = grid.neighbors4(r, c) # uzimamo njegove susede
+
+            sorted_neighbors = []
+            for tile in neighbors:
+                nr, nc = tile.pos
+
+                if nr == r and nc == c + 1: # istok
+                    dir_prio = 0
+                elif nr == r + 1 and nc == c: # jug
+                    dir_prio = 1
+                elif nr == r and nc == c - 1: # zapad
+                    dir_prio = 2
+                elif nr == r - 1 and nc == c: # sever
+                    dir_prio = 3
+                else:
+                    dir_prio = 999
+
+                sorted_neighbors.append((tile.cost, dir_prio, tile))
+
+            sorted_neighbors.sort(key=lambda x: (x[0], x[1]))  # sortiramo susede
             
-            sorted_neighbors = sort_neighbors(current, neighbors) # sortiramo susede
-            
-            found_unvisited = False
-            for neighbor_tile in sorted_neighbors:
-                neighbor_pos = neighbor_tile.pos
-                if neighbor_pos not in visited: # proveravamo da li smo ga vec posetili
-                    visited.add(neighbor_pos)
-                    stack.append(neighbor_pos)
-                    parent[neighbor_pos] = current
-                    found_unvisited = True
+            moved = False
+            for _, _, tile in sorted_neighbors:
+                nxt = tile.pos
+                if nxt not in visited: # proveravamo da li smo ga vec posetili
+                    visited.add(nxt)
+                    stack.append(nxt)
+                    parent[nxt] = curr
+                    moved = True
                     break
             
-            if not found_unvisited: # backtracking, ako nemamo vise gde da idemo
+            if not moved: # backtracking, ako nemamo vise gde da idemo
                 stack.pop()
         
         return Path([start])
@@ -107,106 +102,107 @@ class BranchAndBoundAgent(Agent):
         super().__init__("BranchAndBound")
     
     def find_path(self, grid: Grid, start: tuple[int, int], goal: tuple[int, int]) -> Path:
-        counter = 0
-        pq = [(0, 1, counter, start, [start])] # cena putanje, broj cvorova na putanji, counter, trenutna pozicija, path
-        counter += 1
+        cnt = 0
+        
+        pq = [(0, 1, cnt, start, [start])] # cena putanje, broj cvorova na putanji, counter, trenutna pozicija, path
+        cnt += 1
         
         best_cost = {start: 0}
-        best_solution = None
-        best_solution_cost = float('inf')
+        best_path = None
+        best_total = float('inf')
         
         while pq:
-            current_cost, num_nodes, _, current_pos, path = heapq.heappop(pq) # heappop uzima element sa najmanjom cenom iz pq po redosledu kako smo naveli u pq
+            cost, _, _, curr, path = heapq.heappop(pq) # heappop uzima element sa najmanjom cenom iz pq po redosledu kako smo naveli u pq
             
-            if current_cost >= best_solution_cost: # pruning - ogranicavamo ga da bude brzi
+            if cost >= best_total: # pruning - ogranicavamo ga da bude brzi
                 continue
             
-            if current_pos == goal:
-                if current_cost < best_solution_cost:
-                    best_solution_cost = current_cost
-                    best_solution = path
+            if curr == goal:
+                if cost < best_total:
+                    best_total = cost
+                    best_path = path
                 continue
             
-            r, c = current_pos
+            r, c = curr
             neighbors = grid.neighbors4(r, c)
             
-            for neighbor_tile in neighbors: # grananje
-                neighbor_pos = neighbor_tile.pos
-                new_cost = current_cost + neighbor_tile.cost
+            for tile in neighbors: # grananje
+                nxt = tile.pos
+                new_cost = cost + tile.cost
                 
-                if neighbor_pos not in best_cost or new_cost < best_cost[neighbor_pos]:
-                    if new_cost < best_solution_cost:
-                        best_cost[neighbor_pos] = new_cost
-                        new_path = path + [neighbor_pos]
-                        new_num_nodes = len(new_path)
-
-                        heapq.heappush(pq, (new_cost, new_num_nodes, counter, neighbor_pos, new_path))
-                        counter += 1
+                if nxt not in best_cost or new_cost < best_cost[nxt]:
+                    if new_cost < best_total:
+                        best_cost[nxt] = new_cost
+                        new_path = path + [nxt]
+                        
+                        heapq.heappush(
+                            pq,
+                            (new_cost, len(new_path), cnt, nxt, new_path)
+                        )
+                        cnt += 1
         
-        if best_solution: # gledamo da li smo pronasli putanju do cilja
-            return Path(best_solution)
-        else:
-            return Path([start])
+        if best_path:  # gledamo da li smo pronasli putanju do cilja
+            return Path(best_path)
+        return Path([start])
 
 class AStar(Agent):
     def __init__(self):
         super().__init__("AStar")
     
     def find_path(self, grid: Grid, start: tuple[int, int], goal: tuple[int, int]) -> Path:
-        counter = 0
+        cnt = 0
         
-        def heuristic(pos):
-            return grid.manhattan(pos, goal) * 2 # *2 da heuristika ne precenjuje
+        def h(pos):
+            return grid.manhattan(pos, goal) * 2  # *2 da heuristika ne precenjuje
         
-        g_score = {start: 0} # stvarna cena od starta
-        f_score = {start: heuristic(start)} # g + h
+        g = {start: 0}  # stvarna cena od starta
+        f = {start: h(start)}  # g + h
         
-        pq = [(f_score[start], 1, counter, start)] # procenjena ukupna cena, broj cvorova, counter, pozicija cvora
-        counter += 1
+        pq = [(f[start], 1, cnt, start)]  
+        # procenjena ukupna cena, broj cvorova, counter, pozicija cvora
+        cnt += 1
         
         parent = {start: None}
-        
-        closed_set = set() # obradjeni cvorovi
+        closed = set()  # obradjeni cvorovi
         
         while pq:
-            current_f, num_nodes, _, current_pos = heapq.heappop(pq)
+            _, depth, _, curr = heapq.heappop(pq)
             
-            if current_pos in closed_set: # obradjujemo putanju do cvora samo jednom
+            if curr in closed:  # obradjujemo putanju do cvora samo jednom
                 continue
             
-            closed_set.add(current_pos)
+            closed.add(curr)
             
-            if current_pos == goal:
-                path_nodes = []
+            if curr == goal:
+                path = []
                 node = goal
-                while node is not None: # rekonstrukcija putanje
-                    path_nodes.append(node)
+                while node is not None:  # rekonstrukcija putanje
+                    path.append(node)
                     node = parent[node]
-                path_nodes.reverse()
-                return Path(path_nodes)
+                path.reverse()
+                return Path(path)
             
-            r, c = current_pos
+            r, c = curr
             neighbors = grid.neighbors4(r, c)
             
-            for neighbor_tile in neighbors:
-                neighbor_pos = neighbor_tile.pos
+            for tile in neighbors:
+                nxt = tile.pos
                 
-                if neighbor_pos in closed_set:
+                if nxt in closed:
                     continue
                 
-                tentative_g = g_score[current_pos] + neighbor_tile.cost
+                new_g = g[curr] + tile.cost
                 
-                if neighbor_pos not in g_score or tentative_g < g_score[neighbor_pos]:
-                    parent[neighbor_pos] = current_pos
-                    g_score[neighbor_pos] = tentative_g
+                if nxt not in g or new_g < g[nxt]:
+                    parent[nxt] = curr
+                    g[nxt] = new_g
+                    f[nxt] = new_g + h(nxt)
                     
-                    f = tentative_g + heuristic(neighbor_pos)
-                    f_score[neighbor_pos] = f
-                    
-                    new_num_nodes = num_nodes + 1
-                    
-                    heapq.heappush(pq, (f, new_num_nodes, counter, neighbor_pos))
-                    counter += 1
+                    heapq.heappush(
+                        pq,
+                        (f[nxt], depth + 1, cnt, nxt)
+                    )
+                    cnt += 1
         
         return Path([start])
 
